@@ -10,7 +10,7 @@
 
     <application
         android:allowBackup="false"
-        android:banner="@drawable/banner"
+        android:banner="@drawable/banner_tv"
         android:icon="@drawable/ic_launcher"
         android:label="Jumpscare TV"
         android:theme="@android:style/Theme.Material.NoActionBar">
