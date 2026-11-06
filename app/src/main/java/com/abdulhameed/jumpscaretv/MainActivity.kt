@@ -1,5 +1,6 @@
 package com.abdulhameed.jumpscaretv
 
+import android.app.Activity
 import android.graphics.*
 import android.media.AudioManager
 import android.media.ToneGenerator
@@ -10,11 +11,10 @@ import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.activity.ComponentActivity
 import kotlin.math.min
 import kotlin.random.Random
 
-class MainActivity : ComponentActivity() {
+class MainActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
     private var jumpTask: Runnable? = null
     private var tone: ToneGenerator? = null
@@ -65,11 +65,14 @@ class MainActivity : ComponentActivity() {
 
     private fun showJumpscare() {
         cancelScheduledJump()
+
         if (jumpView == null) {
             jumpView = JumpscareView(this)
         }
+
         setContentView(jumpView)
         tone?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 900)
+
         handler.postDelayed({
             if (!isFinishing) {
                 jumpView = null
