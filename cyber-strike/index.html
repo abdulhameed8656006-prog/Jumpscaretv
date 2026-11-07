@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#07111f">
+<meta name="description" content="Cyber Strike - fast mobile-friendly online arcade shooter.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<title>Cyber Strike</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#050914;color:#eaf4ff;font-family:system-ui,-apple-system,Segoe UI,sans-serif;touch-action:none}
+#game{display:block;width:100vw;height:100vh;background:radial-gradient(circle at 50% 35%,#10213d 0,#070d1b 48%,#03060d 100%)}
+#hud{position:fixed;inset:0;pointer-events:none}.top{display:flex;justify-content:space-between;gap:10px;padding:max(12px,env(safe-area-inset-top)) 14px 0;font-weight:800;text-shadow:0 2px 8px #000}.pill{background:#0b1628cc;border:1px solid #28466b;border-radius:12px;padding:8px 11px}.accent{color:#67d8ff}
+#menu{position:fixed;inset:0;display:grid;place-items:center;background:#020611aa;backdrop-filter:blur(6px);z-index:5}.card{width:min(92vw,430px);padding:28px;border:1px solid #2c4d73;border-radius:22px;background:#091326ee;box-shadow:0 20px 80px #0008;text-align:center}.logo{font-size:clamp(38px,11vw,64px);font-weight:950;letter-spacing:.04em;color:#7ce7ff;text-shadow:0 0 25px #00aaff88}.sub{color:#9db4cd;margin:5px 0 20px}.field{width:100%;padding:13px 15px;border-radius:12px;border:1px solid #345678;background:#07101e;color:white;font-size:16px;margin:6px 0 10px}.btn{width:100%;border:0;border-radius:12px;padding:14px;margin-top:8px;background:#1aa8e8;color:#00111b;font-weight:900;font-size:16px}.btn.alt{background:#14253b;color:#bfe8ff;border:1px solid #2c4d73}.status{min-height:22px;color:#8ea8c3;font-size:13px;margin-top:12px}
+#controls{position:fixed;inset:auto 0 0;display:flex;justify-content:space-between;align-items:end;padding:0 18px max(18px,env(safe-area-inset-bottom));pointer-events:none}.stick,.fire{pointer-events:auto;opacity:.75}.stick{width:128px;height:128px;border-radius:50%;background:#10233dcc;border:2px solid #3d6288;position:relative}.knob{width:52px;height:52px;border-radius:50%;background:#55d7ff;position:absolute;left:38px;top:38px;box-shadow:0 0 20px #00bfff88}.fire{width:100px;height:100px;border-radius:50%;border:2px solid #63dcff;background:#143b57cc;color:#bff3ff;font-weight:950;font-size:17px}.hint{position:fixed;left:50%;transform:translateX(-50%);bottom:12px;color:#7892ad;font-size:11px;pointer-events:none}
+@media(min-width:800px){#controls{display:none}.hint{bottom:18px}.card{padding:34px}}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="hud"><div class="top"><div class="pill">CYBER STRIKE</div><div class="pill">Score <span id="score" class="accent">0</span> · Players <span id="players" class="accent">1</span></div></div></div>
+<div id="menu"><div class="card">
+<div class="logo">CYBER STRIKE</div><div class="sub">Online arcade shooter prototype</div>
+<input id="name" class="field" maxlength="16" placeholder="Enter player name" value="Player">
+<button id="host" class="btn">CREATE ONLINE ROOM</button>
+<button id="join" class="btn alt">JOIN ROOM</button>
+<input id="room" class="field" maxlength="20" placeholder="Room code (for joining)" style="display:none">
+<div id="status" class="status">Choose Create to start an online room.</div>
+</div></div>
+<div id="controls"><div class="stick" id="stick"><div class="knob" id="knob"></div></div><button class="fire" id="fire">FIRE</button></div>
+<div class="hint">Desktop: WASD / arrows to move · mouse to aim · click to fire</div>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+const c=document.getElementById('game'),ctx=c.getContext('2d'),scoreEl=document.getElementById('score'),playersEl=document.getElementById('players'),menu=document.getElementById('menu'),statusEl=document.getElementById('status'),nameEl=document.getElementById('name'),roomEl=document.getElementById('room');
+let W=innerWidth,H=innerHeight,dpr=Math.min(devicePixelRatio||1,2),running=false,peer=null,conn=null,isHost=false,roomId='',last=0,score=0,remotePlayers={},keys={},mouse={x:W/2,y:H/2,down:false},joy={x:0,y:0},shots=[],particles=[],enemies=[];
+const me={x:W/2,y:H/2,r:16,speed:260,name:'Player'};
+function resize(){W=innerWidth;H=innerHeight;c.width=W*dpr;c.height=H*dpr;c.style.width=W+'px';c.style.height=H+'px';ctx.setTransform(dpr,0,0,dpr,0,0)} addEventListener('resize',resize);resize();
+function setStatus(s){statusEl.textContent=s}
+function rand(a,b){return Math.random()*(b-a)+a}
+function spawnEnemy(){const side=Math.floor(Math.random()*4);let x=side<2?rand(0,W):side===2?-30:W+30,y=side<2?(side?H+30:-30):rand(0,H);enemies.push({x,y,r:13,speed:rand(45,85)})}
+function shoot(x,y,tx,ty){const a=Math.atan2(ty-y,tx-x);shots.push({x,y,vx:Math.cos(a)*650,vy:Math.sin(a)*650,life:1,owner:'me'})}
+function burst(x,y){for(let i=0;i<7;i++)particles.push({x,y,vx:rand(-100,100),vy:rand(-100,100),life:.35})}
+function draw(){ctx.clearRect(0,0,W,H);ctx.strokeStyle='#112742';ctx.lineWidth=1;for(let x=0;x<W;x+=50){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}for(let y=0;y<H;y+=50){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
+for(const e of enemies){ctx.beginPath();ctx.arc(e.x,e.y,e.r,0,Math.PI*2);ctx.fillStyle='#7d5cff';ctx.fill();ctx.strokeStyle='#b7a8ff';ctx.stroke()}
+for(const p of Object.values(remotePlayers)){ctx.beginPath();ctx.arc(p.x,p.y,16,0,Math.PI*2);ctx.fillStyle='#ffb84d';ctx.fill();ctx.fillStyle='#d9e8f5';ctx.font='11px system-ui';ctx.textAlign='center';ctx.fillText(p.name||'Player',p.x,p.y-23)}
+for(const s of shots){ctx.beginPath();ctx.arc(s.x,s.y,4,0,Math.PI*2);ctx.fillStyle='#7ce7ff';ctx.fill()}
+ctx.beginPath();ctx.arc(me.x,me.y,16,0,Math.PI*2);ctx.fillStyle='#55d7ff';ctx.fill();ctx.strokeStyle='#d8f8ff';ctx.stroke();ctx.fillStyle='#d9e8f5';ctx.font='11px system-ui';ctx.textAlign='center';ctx.fillText(me.name,me.x,me.y-23);
+for(const p of particles){ctx.globalAlpha=Math.max(0,p.life/.35);ctx.fillStyle='#7ce7ff';ctx.fillRect(p.x,p.y,3,3)}ctx.globalAlpha=1}
+function update(dt){let dx=(keys.w||keys.ArrowUp?1:0)-(keys.s||keys.ArrowDown?1:0),dy=(keys.d||keys.ArrowRight?1:0)-(keys.a||keys.ArrowLeft?1:0);dx+=joy.x;dy+=joy.y;const l=Math.hypot(dx,dy)||1;me.x=Math.max(20,Math.min(W-20,me.x+dx/l*me.speed*dt));me.y=Math.max(20,Math.min(H-20,me.y+dy/l*me.speed*dt));
+for(const s of shots){s.x+=s.vx*dt;s.y+=s.vy*dt;s.life-=dt}
+shots=shots.filter(s=>s.life>0&&s.x>-20&&s.x<W+20&&s.y>-20&&s.y<H+20);
+for(const e of enemies){const a=Math.atan2(me.y-e.y,me.x-e.x);e.x+=Math.cos(a)*e.speed*dt;e.y+=Math.sin(a)*e.speed*dt;if(Math.hypot(me.x-e.x,me.y-e.y)<28){e.x=rand(0,W);e.y=rand(0,H)}}
+for(const s of shots){for(let i=enemies.length-1;i>=0;i--){if(Math.hypot(s.x-enemies[i].x,s.y-enemies[i].y)<enemies[i].r+6){burst(enemies[i].x,enemies[i].y);enemies.splice(i,1);score++;scoreEl.textContent=score;break}}}
+for(const p of particles){p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt}particles=particles.filter(p=>p.life>0);
+if(enemies.length<Math.min(8,2+Math.floor(score/5)))spawnEnemy();
+if(conn&&conn.open){try{conn.send({t:'state',x:me.x/W,y:me.y/H,name:me.name,score})}catch{}}
+}
+function loop(t){if(!running)return;const dt=Math.min(.033,(t-last)/1000||0);last=t;update(dt);draw();requestAnimationFrame(loop)}
+function startGame(){running=true;menu.style.display='none';me.name=(nameEl.value.trim()||'Player').slice(0,16);for(let i=0;i<3;i++)spawnEnemy();requestAnimationFrame(loop)}
+function makeHost(){isHost=true;roomId=Math.random().toString(36).slice(2,8).toUpperCase();peer=new Peer('CS-'+roomId);peer.on('open',()=>{roomEl.style.display='block';roomEl.value=roomId;setStatus('Room '+roomId+' created. Share the code with a friend.');startGame()});peer.on('connection',c=>{conn=c;wireConn(c)});peer.on('error',e=>setStatus('Network error: '+e.type))}
+function joinRoom(){if(!roomEl.value.trim()){roomEl.style.display='block';setStatus('Enter a room code first.');return}roomId=roomEl.value.trim().toUpperCase();peer=new Peer();peer.on('open',()=>{conn=peer.connect('CS-'+roomId);wireConn(conn);conn.on('open',()=>{setStatus('Connected to room '+roomId);startGame()})});peer.on('error',e=>setStatus('Could not join: '+e.type))}
+function wireConn(cn){cn.on('open',()=>{setStatus('Online room connected');startGame()});cn.on('data',m=>{if(m.t==='state'){remotePlayers.peer={x:m.x*W,y:m.y*H,name:m.name,score:m.score};playersEl.textContent=2}});cn.on('close',()=>{delete remotePlayers.peer;playersEl.textContent=1})}
+document.getElementById('host').onclick=makeHost;document.getElementById('join').onclick=()=>{roomEl.style.display='block';joinRoom()};
+addEventListener('keydown',e=>keys[e.key]=true);addEventListener('keyup',e=>keys[e.key]=false);
+addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY});addEventListener('mousedown',()=>mouse.down=true);addEventListener('mouseup',()=>mouse.down=false);
+let lastShot=0;function tryFire(){const now=performance.now();if(now-lastShot<180)return;lastShot=now;shoot(me.x,me.y,mouse.x,mouse.y)}
+addEventListener('click',e=>{if(running&&e.target===c)tryFire()});
+const stick=document.getElementById('stick'),knob=document.getElementById('knob');function joyMove(e){const r=stick.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,dx=e.clientX-cx,dy=e.clientY-cy,l=Math.min(48,Math.hypot(dx,dy)),a=Math.atan2(dy,dx);joy.x=Math.cos(a)*l/48;joy.y=Math.sin(a)*l/48;knob.style.transform='translate('+joy.x*48+'px,'+joy.y*48+'px)'}function joyEnd(){joy.x=joy.y=0;knob.style.transform='translate(0,0)'}stick.addEventListener('pointermove',joyMove);stick.addEventListener('pointerdown',e=>{stick.setPointerCapture(e.pointerId);joyMove(e)});stick.addEventListener('pointerup',joyEnd);stick.addEventListener('pointercancel',joyEnd);document.getElementById('fire').addEventListener('pointerdown',()=>{mouse.x=me.x+1;mouse.y=me.y-1;tryFire()});
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body></html>
